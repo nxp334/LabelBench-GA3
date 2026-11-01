@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from LabelBench.trainer.trainer_impl.pytorch_passive_trainer import PyTorchPassiveTrainer
 from LabelBench.dataset.feature_extractor import make_semi_transforms
+from LabelBench.trainer.utils import effective_max_epoch
 
 
 class PyTorchSemiTrainer(PyTorchPassiveTrainer):
@@ -29,6 +30,10 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
             raise NotImplementedError("Subclass does not specify strong transformation use in use_strong.")
 
         model, params, loss_fn, max_epoch, optimizer, scheduler, early_stopping = self.init_train(finetune_model)
+        min_steps = self.trainer_config.get("min_steps")
+        max_epoch = effective_max_epoch(max_epoch, len(self.dataset.labeled_idxs()),
+                                        self.trainer_config["train_batch_size"], min_steps)
+        self.num_steps_taken = 0
         mixup_fn = self.trainer_config["mixup_fn"](self.dataset.num_classes)
 
         # Get the training dataset for the non-embedding dataset.
@@ -50,6 +55,8 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
 
         counter = 0
         for epoch in tqdm(range(max_epoch), desc="Training Epoch"):
+            self.stopped_epoch = epoch + 1
+
             # For each epoch, update the embedding dataset and use the saved embedding dataset epoch.
             if "use_embeddings" in self.trainer_config and self.trainer_config["use_embeddings"]:
                 self.dataset.update_embedding_dataset(epoch=epoch, feature_extractor=self.feature_extractor,
@@ -114,10 +121,11 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
                 if "clip_grad" in self.trainer_config:
                     nn.utils.clip_grad_norm_(params, self.trainer_config["clip_grad"])
                 optimizer.step()
+                self.num_steps_taken += 1
 
             train_dataset.set_return_indices(False)
 
-            if self.check_early_stop(early_stopping, model):
+            if self.num_steps_taken >= (min_steps or 0) and self.check_early_stop(early_stopping, model):
                 break
 
         # Set embeddings back to not using semi-supervised transformation for evaluation.
@@ -126,6 +134,8 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
         elif self.use_strong:
             train_dataset.set_strong_transform(None)
 
+        self.best_val_loss = None
         if early_stopping is not None:
             model.load_state_dict(early_stopping.best_state_dict)
+            self.best_val_loss = float(early_stopping.val_loss_min)
         return model

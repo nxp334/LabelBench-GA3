@@ -8,7 +8,16 @@ import LabelBench.dataset.dataset_impl
 from LabelBench.skeleton.dataset_skeleton import ALDataset, datasets
 
 
-def get_dataset(name, data_dir):
+def get_dataset(name, data_dir, **dataset_kwargs):
+    if dataset_kwargs:
+        # Parameterised datasets return their labels. The file cache of get_labels is keyed by name only, so it would
+        # mix up the labels of different parameters.
+        data_type, get_fn = datasets[name]
+        train_dataset, val_dataset, test_dataset, train_labels, val_labels, test_labels, num_classes, classnames = \
+            get_fn(data_dir, **dataset_kwargs)
+        return ALDataset(train_dataset, val_dataset, test_dataset, train_labels, val_labels, test_labels, data_type,
+                         num_classes, classnames)
+
     if "_imb_" in name:
         n_class = int(name.split("_")[-1])
         name = name[:-(len(name.split("_")[-1]) + 1)]

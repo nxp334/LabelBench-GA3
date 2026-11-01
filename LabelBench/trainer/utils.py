@@ -1,7 +1,20 @@
 # Modified version of https://github.com/Bjarten/early-stopping-pytorch/blob/master/pytorchtools.py.
 import copy
+import math
+from typing import Optional
+
 import numpy as np
 import torch
+
+
+def effective_max_epoch(max_epoch: int, num_labeled: int, train_batch_size: int,
+                        min_steps: Optional[int] = None) -> int:
+    """Number of epochs that gives at least min_steps optimizer steps, and never less than max_epoch."""
+    if min_steps is None:
+        return max_epoch
+    # The labeled loader only drops the last batch if there is a full batch.
+    steps_per_epoch = num_labeled // train_batch_size if num_labeled >= train_batch_size else 1
+    return max(max_epoch, math.ceil(min_steps / steps_per_epoch))
 
 
 class EarlyStopping:
