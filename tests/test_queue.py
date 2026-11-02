@@ -1,7 +1,7 @@
 import numpy as np
 
 from tools.make_queue import ALL_CONDITIONS, build_queue, write_queue
-from tools.run_queue import read_queue, select_jobs
+from tools.run_queue import eval_command, read_queue, select_jobs
 
 KS = (10, 20, 50, 100)
 SEEDS = (1, 2, 3)
@@ -76,3 +76,28 @@ def test_write_queue_drops_missing_files_and_roundtrips(tmp_path):
 
     assert write_queue(str(path), queue, str(tmp_path)) == (1, 1)
     assert read_queue(str(path)) == [("e2e", str(acq / "margin_K10_s1_B200.npy"))]
+
+
+def test_queue_without_trainer_config_keeps_two_columns(tmp_path):
+    (tmp_path / "acq").mkdir()
+    np.save(tmp_path / "acq" / "margin_K10_s1_B200.npy", np.arange(200))
+    path = tmp_path / "queue.tsv"
+    write_queue(str(path), [("proxy", "margin", 10, 1, 200)], str(tmp_path))
+    assert path.read_text() == f"proxy\t{tmp_path / 'acq' / 'margin_K10_s1_B200.npy'}\n"
+
+
+def test_trainer_config_goes_from_queue_to_the_eval_command(tmp_path):
+    (tmp_path / "acq").mkdir()
+    np.save(tmp_path / "acq" / "margin_K10_s1_B200.npy", np.arange(200))
+    path = tmp_path / "queue.tsv"
+    write_queue(str(path), [("proxy", "margin", 10, 1, 200)], str(tmp_path), "floor.json")
+
+    job = read_queue(str(path))[0]
+    command = eval_command(job, "eval.py", "save", "data", "entity", "project")
+    assert command[command.index("--trainer_config") + 1] == "floor.json"
+    assert command[command.index("--mode") + 1] == "proxy" and command[command.index("--file") + 1] == job[1]
+
+
+def test_eval_command_without_trainer_config_uses_the_config_of_the_mode():
+    command = eval_command(("proxy", "file.npy"), "eval.py", "save", "data", "entity", "project")
+    assert "--trainer_config" not in command

@@ -5,11 +5,11 @@ from tools.collect_results import collect_mode
 from tools.make_queue import ALL_CONDITIONS
 
 
-def write_result(save_dir, condition, K, s, B, accuracy):
+def write_result(save_dir, condition, K, s, B, accuracy, **fields):
     folder = save_dir / "eval" / "proxy"
     folder.mkdir(parents=True, exist_ok=True)
     result = {"K": K, "s": s, "B": B, "b": B / K, "condition": condition, "mode": "proxy", "test_accuracy": accuracy,
-              "per_class_test_accuracy": [accuracy] * K}
+              "per_class_test_accuracy": [accuracy] * K, **fields}
     (folder / f"{condition}_K{K}_s{s}_B{B}.json").write_text(json.dumps(result))
 
 
@@ -57,3 +57,14 @@ def test_results_from_before_ended_by_get_an_empty_cell(tmp_path):
     write_result(tmp_path, "random", 10, 1, 200, 0.6)
     collect_mode(str(tmp_path), "proxy")
     assert read_rows(tmp_path)[0]["ended_by"] == ""
+
+
+def test_every_row_records_trainer_config_and_ended_by(tmp_path):
+    write_result(tmp_path, "random", 10, 1, 100, 0.5, trainer_config="floor.json", ended_by="early_stopping")
+    write_result(tmp_path, "margin", 10, 1, 200, 0.7, trainer_config="floor.json", ended_by="epoch_limit")
+    collect_mode(str(tmp_path), "proxy")
+
+    rows = read_rows(tmp_path)
+    assert len(rows) == 6 and {row["trainer_config"] for row in rows} == {"floor.json"}
+    assert {row["ended_by"] for row in rows if row["B"] == "100"} == {"early_stopping"}
+    assert [row["ended_by"] for row in rows if row["B"] == "200"] == ["epoch_limit"]

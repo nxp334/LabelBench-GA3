@@ -53,6 +53,14 @@ def test_writes_all_fields_and_uses_default_config(tmp_path):
     assert "minsteps" in MODE_CONFIGS["proxy"]["trainer"] and "minsteps" not in MODE_CONFIGS["e2e"]["trainer"]
 
 
+def test_trainer_config_override_is_used_and_recorded(tmp_path):
+    save_dir, stub = str(tmp_path), StubTrainer()
+    file = save_labeled_set(save_dir, "random", 10, 1, np.arange(200))
+    evaluate_file(file, "proxy", save_dir, "./data", "floor.json", train_fn=stub)
+    assert stub.calls[0][4] == "floor.json"
+    assert load_json(save_dir, "proxy", "random_K10_s1_B200")["trainer_config"] == "floor.json"
+
+
 def test_saves_predictions_and_test_labels_that_reproduce_the_accuracy(tmp_path):
     save_dir = str(tmp_path)
     file = save_labeled_set(save_dir, "random", 10, 1, np.arange(200))
