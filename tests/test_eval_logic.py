@@ -17,7 +17,8 @@ class StubTrainer:
     def __call__(self, orig_idxs, K, s, train_seed, mode, data_dir, trainer_config):
         self.calls.append((K, s, train_seed, mode, trainer_config))
         return {"test_predictions": np.array([0, 1, 1, 1]), "test_labels": np.array([0, 0, 1, 1]), "steps_taken": 500,
-                "stopped_epoch": 34, "best_val_loss": 1.5, "train_seconds": 1.0, "per_class_counts": [10] * K}
+                "stopped_epoch": 34, "ended_by": "epoch_limit", "best_val_loss": 1.5, "train_seconds": 1.0,
+                "per_class_counts": [10] * K}
 
 
 def load_json(save_dir, mode, name):
@@ -43,6 +44,7 @@ def test_writes_all_fields_and_uses_default_config(tmp_path):
     assert result["test_accuracy"] == 0.75 and result["per_class_test_accuracy"][:2] == [0.5, 1.0]
     assert result["steps_taken"] == 500 and result["per_class_counts"] == [10] * 10
     assert (result["stopped_epoch"], result["best_val_loss"]) == (34, 1.5)
+    assert result["ended_by"] == "epoch_limit"
     assert result["train_seconds"] == 1.0 and result["runtime_seconds"] >= 0
     assert result["class_entropy_norm"] == pytest.approx(1.0) and result["class_count_std"] == 0
     assert result["train_seed"] == derive_seed("train", 1, 200) and "git_commit" in result

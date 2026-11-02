@@ -7,14 +7,30 @@ import numpy as np
 import torch
 
 
-def effective_max_epoch(max_epoch: int, num_labeled: int, train_batch_size: int,
-                        min_steps: Optional[int] = None) -> int:
-    """Number of epochs that gives at least min_steps optimizer steps, and never less than max_epoch."""
-    if min_steps is None:
+def effective_max_epoch(max_epoch: int, num_labeled: int, train_batch_size: int, min_steps: Optional[int] = None,
+                        max_steps: Optional[int] = None) -> int:
+    """
+    Epoch limit of a training run. With max_steps it is the first epoch that reaches max_steps, in place of max_epoch.
+    Otherwise min_steps can only raise max_epoch, to the first epoch that reaches min_steps.
+    """
+    if min_steps is None and max_steps is None:
         return max_epoch
     # The labeled loader only drops the last batch if there is a full batch.
     steps_per_epoch = num_labeled // train_batch_size if num_labeled >= train_batch_size else 1
+    if max_steps is not None:
+        assert min_steps is None or max_steps >= min_steps, "max_steps must be at least min_steps."
+        return math.ceil(max_steps / steps_per_epoch)
     return max(max_epoch, math.ceil(min_steps / steps_per_epoch))
+
+
+def should_validate(num_steps_taken: int, last_validation_step: Optional[int], min_steps: Optional[int] = None,
+                    val_every_steps: Optional[int] = None, is_last_epoch: bool = False) -> bool:
+    """Whether to run the early-stopping check after this epoch. Never before min_steps, and every epoch by default."""
+    if num_steps_taken < (min_steps or 0):
+        return False
+    if val_every_steps is None or last_validation_step is None or is_last_epoch:
+        return True
+    return num_steps_taken - last_validation_step >= val_every_steps
 
 
 class EarlyStopping:

@@ -107,7 +107,7 @@ def train_and_test(orig_idxs: np.ndarray, K: int, s: int, train_seed: int, mode:
 
     return {"test_predictions": np.argmax(preds, axis=-1), "test_labels": np.argmax(labels, axis=-1),
             "steps_taken": int(trainer.num_steps_taken), "stopped_epoch": trainer.stopped_epoch,
-            "best_val_loss": trainer.best_val_loss, "train_seconds": train_seconds,
+            "ended_by": trainer.ended_by, "best_val_loss": trainer.best_val_loss, "train_seconds": train_seconds,
             "per_class_counts": [int(n) for n in np.sum(dataset.get_train_labels(), axis=0)]}
 
 
@@ -115,7 +115,7 @@ def log_wandb(result: Dict, wandb_name: str, wandb_project: str) -> None:
     """Log one result, with the experiment fields as config."""
     import wandb
 
-    config_keys = ("K", "s", "B", "b", "condition", "mode", "train_seed", "trainer_config", "git_commit")
+    config_keys = ("K", "s", "B", "b", "condition", "mode", "train_seed", "trainer_config", "git_commit", "ended_by")
     K, s, B, condition, mode = (result[key] for key in ("K", "s", "B", "condition", "mode"))
     wandb.init(project=wandb_project, entity=wandb_name, config={key: result[key] for key in config_keys},
                name=f"{condition}_K{K}_s{s}_B{B}", job_type=f"eval-{mode}", group=f"K{K}_s{s}",

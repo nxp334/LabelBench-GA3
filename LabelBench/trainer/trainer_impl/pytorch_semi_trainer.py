@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from LabelBench.trainer.trainer_impl.pytorch_passive_trainer import PyTorchPassiveTrainer
 from LabelBench.dataset.feature_extractor import make_semi_transforms
-from LabelBench.trainer.utils import effective_max_epoch
+from LabelBench.trainer.utils import effective_max_epoch, should_validate
 
 
 class PyTorchSemiTrainer(PyTorchPassiveTrainer):
@@ -32,8 +32,11 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
         model, params, loss_fn, max_epoch, optimizer, scheduler, early_stopping = self.init_train(finetune_model)
         min_steps = self.trainer_config.get("min_steps")
         max_epoch = effective_max_epoch(max_epoch, len(self.dataset.labeled_idxs()),
-                                        self.trainer_config["train_batch_size"], min_steps)
+                                        self.trainer_config["train_batch_size"], min_steps,
+                                        self.trainer_config.get("max_steps"))
         self.num_steps_taken = 0
+        self.ended_by = "epoch_limit"
+        last_validation_step = None
         mixup_fn = self.trainer_config["mixup_fn"](self.dataset.num_classes)
 
         # Get the training dataset for the non-embedding dataset.
@@ -125,8 +128,12 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
 
             train_dataset.set_return_indices(False)
 
-            if self.num_steps_taken >= (min_steps or 0) and self.check_early_stop(early_stopping, model):
-                break
+            if should_validate(self.num_steps_taken, last_validation_step, min_steps,
+                               self.trainer_config.get("val_every_steps"), epoch == max_epoch - 1):
+                last_validation_step = self.num_steps_taken
+                if self.check_early_stop(early_stopping, model):
+                    self.ended_by = "early_stopping"
+                    break
 
         # Set embeddings back to not using semi-supervised transformation for evaluation.
         if "use_embeddings" in self.trainer_config and self.trainer_config["use_embeddings"]:

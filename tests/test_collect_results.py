@@ -51,3 +51,9 @@ def test_condition_evaluated_at_init_keeps_its_own_result(tmp_path):
     collect_mode(str(tmp_path), "proxy")
     margin = next(row for row in read_rows(tmp_path) if row["condition"] == "margin")
     assert margin["test_accuracy"] == "0.9" and margin["evaluated_as"] == "margin"
+
+
+def test_results_from_before_ended_by_get_an_empty_cell(tmp_path):
+    write_result(tmp_path, "random", 10, 1, 200, 0.6)
+    collect_mode(str(tmp_path), "proxy")
+    assert read_rows(tmp_path)[0]["ended_by"] == ""
