@@ -1,7 +1,7 @@
 import csv
 import json
 
-from tools.collect_results import collect_mode
+from tools.collect_results import COLUMNS, collect_mode
 from tools.make_queue import ALL_CONDITIONS
 
 
@@ -68,3 +68,20 @@ def test_every_row_records_trainer_config_and_ended_by(tmp_path):
     assert len(rows) == 6 and {row["trainer_config"] for row in rows} == {"floor.json"}
     assert {row["ended_by"] for row in rows if row["B"] == "100"} == {"early_stopping"}
     assert [row["ended_by"] for row in rows if row["B"] == "200"] == ["epoch_limit"]
+
+
+def test_best_step_is_the_last_column_so_other_columns_keep_their_number():
+    assert COLUMNS[-1] == "best_step"
+    assert COLUMNS.index("ended_by") == 16 and COLUMNS.index("trainer_config") == 19 and len(COLUMNS) == 22
+
+
+def test_best_step_reaches_the_csv(tmp_path):
+    write_result(tmp_path, "margin", 10, 1, 200, 0.7, best_step=600)
+    collect_mode(str(tmp_path), "proxy")
+    assert read_rows(tmp_path)[0]["best_step"] == "600"
+
+
+def test_results_from_before_best_step_get_an_empty_cell(tmp_path):
+    write_result(tmp_path, "margin", 10, 1, 200, 0.7)
+    collect_mode(str(tmp_path), "proxy")
+    assert read_rows(tmp_path)[0]["best_step"] == ""

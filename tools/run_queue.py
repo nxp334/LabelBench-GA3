@@ -28,8 +28,8 @@ def select_jobs(jobs: List[Job], worker: int, num_workers: int) -> List[Job]:
 
 def eval_command(job: Job, eval_script: str, save_dir: str, data_dir: str, wandb_name: str,
                  wandb_project: str) -> List[str]:
-    """Command that evaluates one job."""
-    command = [sys.executable, eval_script, "--file", job[1], "--mode", job[0], "--save_dir", save_dir,
+    """Command that evaluates one job. A job that hangs is stopped and logged as FAILED (124)."""
+    command = ["timeout", "1h", sys.executable, eval_script, "--file", job[1], "--mode", job[0], "--save_dir", save_dir,
                "--data_dir", data_dir, "--wandb_name", wandb_name, "--wandb_project", wandb_project]
     return command + ["--trainer_config", job[2]] if len(job) > 2 else command
 

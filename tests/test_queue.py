@@ -101,3 +101,8 @@ def test_trainer_config_goes_from_queue_to_the_eval_command(tmp_path):
 def test_eval_command_without_trainer_config_uses_the_config_of_the_mode():
     command = eval_command(("proxy", "file.npy"), "eval.py", "save", "data", "entity", "project")
     assert "--trainer_config" not in command
+
+
+def test_eval_command_has_a_time_limit():
+    command = eval_command(("proxy", "file.npy"), "eval.py", "save", "data", "entity", "project")
+    assert command[:2] == ["timeout", "1h"]

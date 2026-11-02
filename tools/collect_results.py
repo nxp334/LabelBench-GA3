@@ -14,7 +14,7 @@ from tools.make_queue import ALL_CONDITIONS
 
 COLUMNS = ("K", "s", "B", "b", "condition", "evaluated_as", "mode", "train_seed", "test_accuracy", "macro_f1",
            "class_count_min", "class_count_max", "class_count_std", "class_entropy_norm", "steps_taken",
-           "stopped_epoch", "ended_by", "best_val_loss", "train_seconds", "trainer_config", "git_commit")
+           "stopped_epoch", "ended_by", "best_val_loss", "train_seconds", "trainer_config", "git_commit", "best_step")
 
 
 def tidy_rows(results: List[Dict]) -> List[Dict]:

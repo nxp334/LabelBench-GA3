@@ -28,7 +28,7 @@ num_workers=$((NUM_GPUS * MAX_PARALLEL))
 for worker in $(seq 0 $((num_workers - 1))); do
   gpu=$((worker % NUM_GPUS))
   window_name="worker${worker}_gpu${gpu}"
-  cmd="cd \"$REPO_DIR\" && export PYTHONPATH=\"$REPO_DIR\" TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 OMP_NUM_THREADS=2 CUDA_VISIBLE_DEVICES=${gpu} && \"$PYTHON_BIN\" tools/run_queue.py --queue \"$QUEUE_FILE\" --worker ${worker} --num_workers ${num_workers} --save_dir \"$SAVE_DIR\" --data_dir \"$DATA_DIR\" --wandb_name ATDL-labelbench --wandb_project \"$WANDB_PROJECT_EVAL\" > \"$LOG_DIR/${window_name}.out\" 2>&1"
+  cmd="cd \"$REPO_DIR\" && export PYTHONPATH=\"$REPO_DIR\" TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 OMP_NUM_THREADS=2 CUDA_VISIBLE_DEVICES=${gpu} && \"$PYTHON_BIN\" tools/run_queue.py --queue \"$QUEUE_FILE\" --worker ${worker} --num_workers ${num_workers} --save_dir \"$SAVE_DIR\" --data_dir \"$DATA_DIR\" --wandb_name ATDL-labelbench --wandb_project \"$WANDB_PROJECT_EVAL\" >> \"$LOG_DIR/${window_name}.out\" 2>&1"
   if [[ "$worker" -eq 0 ]]; then
     tmux new-session -d -s "$SESSION" -n "$window_name" "$cmd"
   else

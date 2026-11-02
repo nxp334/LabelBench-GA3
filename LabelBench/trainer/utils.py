@@ -85,3 +85,14 @@ class EarlyStopping:
         self.val_loss_min = val_loss
         if train_loss is not None:
             self.train_loss_min = train_loss
+
+
+def returned_model_step(best_step: Optional[int], num_steps_taken: int,
+                        early_stopping: Optional[EarlyStopping]) -> Optional[int]:
+    """
+    Step of the model that training returns, updated after a validation check. EarlyStopping leaves its counter at 0
+    exactly when the check saved the model, and without EarlyStopping the last model is returned.
+    """
+    if early_stopping is None or early_stopping.counter == 0:
+        return num_steps_taken
+    return best_step

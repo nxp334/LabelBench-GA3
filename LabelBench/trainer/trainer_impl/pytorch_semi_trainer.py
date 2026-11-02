@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from LabelBench.trainer.trainer_impl.pytorch_passive_trainer import PyTorchPassiveTrainer
 from LabelBench.dataset.feature_extractor import make_semi_transforms
-from LabelBench.trainer.utils import effective_max_epoch, should_validate
+from LabelBench.trainer.utils import effective_max_epoch, returned_model_step, should_validate
 
 
 class PyTorchSemiTrainer(PyTorchPassiveTrainer):
@@ -36,6 +36,7 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
                                         self.trainer_config.get("max_steps"))
         self.num_steps_taken = 0
         self.ended_by = "epoch_limit"
+        self.best_step = None
         last_validation_step = None
         mixup_fn = self.trainer_config["mixup_fn"](self.dataset.num_classes)
 
@@ -134,6 +135,7 @@ class PyTorchSemiTrainer(PyTorchPassiveTrainer):
                 if self.check_early_stop(early_stopping, model):
                     self.ended_by = "early_stopping"
                     break
+                self.best_step = returned_model_step(self.best_step, self.num_steps_taken, early_stopping)
 
         # Set embeddings back to not using semi-supervised transformation for evaluation.
         if "use_embeddings" in self.trainer_config and self.trainer_config["use_embeddings"]:

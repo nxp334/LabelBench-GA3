@@ -12,7 +12,7 @@ pip install -r requirements.txt
 wandb login
 
 export REPO_DIR=$PWD PYTHONPATH=$PWD TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
-export DATA_DIR=$HOME/data SAVE_DIR=$HOME/ga3_output PYTHON_BIN=$(which python)
+export DATA_DIR=$HOME/data SAVE_DIR=$HOME/ga3_output PYTHON_BIN=$(command -v python)
 export NUM_GPUS=1 MAX_PARALLEL=4
 export WANDB_PROJECT_SMOKE="LabelBench - ClassBaseline"
 export WANDB_PROJECT_ACQ="LabelBench - ClassBaseline - acquisition"
@@ -25,7 +25,7 @@ windows have them too. `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` is needed because th
 W&B creates these projects in the entity `ATDL-labelbench` on first use. Check the connection before anything else:
 
 ```bash
-python -c "import wandb; r = wandb.init(entity='ATDL-labelbench', project='LabelBench - ClassBaseline', name='wandb-check', job_type='check'); r.log({'ok': 1}); r.finish()"
+"$PYTHON_BIN" -c "import wandb; r = wandb.init(entity='ATDL-labelbench', project='LabelBench - ClassBaseline', name='wandb-check', job_type='check'); r.log({'ok': 1}); r.finish()"
 ```
 
 Expect a run named `wandb-check` in that project.
@@ -33,7 +33,7 @@ Expect a run named `wandb-check` in that project.
 ## 2. Precompute the features
 
 ```bash
-python tools/precompute_features.py --data_dir $DATA_DIR
+"$PYTHON_BIN" tools/precompute_features.py --data_dir $DATA_DIR
 ```
 
 Downloads CIFAR-100 and CLIP, and writes about 2.3 GB to `$DATA_DIR/cifar100/`. Run it in tmux, it needs one pass over
@@ -47,7 +47,7 @@ The results go to `./smoke_output`, so they can never be picked up as real resul
 **3a. Zero-shot check**
 
 ```bash
-python tools/zero_shot_check.py --K 10 --s 1 --data_dir $DATA_DIR
+"$PYTHON_BIN" tools/zero_shot_check.py --K 10 --s 1 --data_dir $DATA_DIR
 ```
 
 Expect ten class names, starting with `squirrel`, `table`, `forest`, and one accuracy line on about 500 images. Accuracy
@@ -56,7 +56,7 @@ must be far above the chance level of 0.10. Close to 0.10 means labels and class
 **3b. Acquisition**
 
 ```bash
-python main.py --seed 1 --wandb_name ATDL-labelbench --wandb_project "$WANDB_PROJECT_SMOKE" \
+"$PYTHON_BIN" main.py --seed 1 --wandb_name ATDL-labelbench --wandb_project "$WANDB_PROJECT_SMOKE" \
   --dataset cifar100_subset --num_classes 10 --class_seed 1 --save_dir ./smoke_output --data_dir $DATA_DIR \
   --metric multi_class --batch_size 100 --num_batch 3 \
   --embed_model_config clip_ViTB32.json --classifier_model_config linear.json \
@@ -71,7 +71,7 @@ Expect `Round 1: 100 labels, training took ...` for each round, and in `smoke_ou
 **3c. Baselines**
 
 ```bash
-python tools/make_baselines.py --save_dir ./smoke_output --K 10 --s 1 --data_dir $DATA_DIR
+"$PYTHON_BIN" tools/make_baselines.py --save_dir ./smoke_output --K 10 --s 1 --data_dir $DATA_DIR
 ```
 
 Expect `Wrote 6 baseline files`: `cb-margin` and `random`, each at B = 100, 200, 300. An assertion error means the AL
@@ -80,10 +80,10 @@ files and the reconstructed init disagree.
 **3d. Evaluation at B=200**
 
 ```bash
-python tools/eval_selection.py --file smoke_output/acq/margin_K10_s1_B200.npy --mode proxy \
+"$PYTHON_BIN" tools/eval_selection.py --file smoke_output/acq/margin_K10_s1_B200.npy --mode proxy \
   --save_dir ./smoke_output --data_dir $DATA_DIR --wandb_project "$WANDB_PROJECT_SMOKE" \
   --trainer_config cifar100/smoke/clip_ViTB32_linear.json
-python tools/collect_results.py --save_dir ./smoke_output
+"$PYTHON_BIN" tools/collect_results.py --save_dir ./smoke_output
 ```
 
 Expect:
@@ -100,7 +100,7 @@ Expect:
 **3e. Is 500 steps enough?**
 
 ```bash
-python tools/proxy_check.py --K 10 --s 1 --B 100 --file smoke_output/acq/margin_K10_s1_B100.npy \
+"$PYTHON_BIN" tools/proxy_check.py --K 10 --s 1 --B 100 --file smoke_output/acq/margin_K10_s1_B100.npy \
   --save_dir ./smoke_output --data_dir $DATA_DIR
 ```
 
@@ -129,14 +129,14 @@ are skipped and unfinished runs start from the beginning. Add `--skip_badge_k100
 
 ```bash
 for s in 1 2 3; do for K in 10 20 50 100; do
-  python tools/make_baselines.py --save_dir $SAVE_DIR --K $K --s $s --data_dir $DATA_DIR
+  "$PYTHON_BIN" tools/make_baselines.py --save_dir $SAVE_DIR --K $K --s $s --data_dir $DATA_DIR
 done; done
 ```
 
 **4c. Queue**
 
 ```bash
-python tools/make_queue.py --save_dir $SAVE_DIR --modes proxy
+"$PYTHON_BIN" tools/make_queue.py --save_dir $SAVE_DIR --modes proxy
 ```
 
 Expect `Wrote 1152 jobs`. With `--skip_badge_k100`, the K=100 BADGE jobs are dropped with a warning.
@@ -154,7 +154,7 @@ same command again: finished jobs are skipped. Results are in `$SAVE_DIR/eval/pr
 **4e. Results table**
 
 ```bash
-python tools/collect_results.py --save_dir $SAVE_DIR
+"$PYTHON_BIN" tools/collect_results.py --save_dir $SAVE_DIR
 ```
 
 Writes `$SAVE_DIR/results_proxy.csv`, with one row per (K, s, B, condition). At b = 10 all conditions share the same

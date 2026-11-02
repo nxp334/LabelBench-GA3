@@ -2,28 +2,31 @@
 # One stage for seeds first_seed..last_seed: acquisition, baselines, queue, evaluation, results table.
 # Stays in the foreground and exits with 0 only if every job of the stage finished, so stages can be chained with &&.
 # Restarting is safe: finished runs and jobs are skipped, and baselines are rebuilt identically.
-# SAVE_DIR and TRAINER_CONFIG have no default here, so a run cannot fall back on the old directory or config.
-# Usage: SAVE_DIR=... TRAINER_CONFIG=... scripts/run_seeds.sh <first_seed> <last_seed>
+# The variables below have no default here, so a run cannot fall back on the old directory, config or W&B projects.
+# Usage: SAVE_DIR=... TRAINER_CONFIG=... DATA_DIR=... PYTHON_BIN=... WANDB_PROJECT_ACQ=... WANDB_PROJECT_EVAL=... \
+#   scripts/run_seeds.sh <first_seed> <last_seed>
 set -euo pipefail
 
 FIRST_SEED="$1"
 LAST_SEED="$2"
 : "${SAVE_DIR:?Set SAVE_DIR to a new directory.}"
 : "${TRAINER_CONFIG:?Set TRAINER_CONFIG.}"
+: "${DATA_DIR:?}"
+: "${PYTHON_BIN:?}"
+: "${WANDB_PROJECT_ACQ:?}"
+: "${WANDB_PROJECT_EVAL:?}"
 if [[ "$(basename "$SAVE_DIR")" == ga3_output ]]; then
   echo "Refusing to write to $SAVE_DIR: it holds the finished n=3 results." >&2
   exit 1
 fi
 
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-DATA_DIR="${DATA_DIR:-/work/LabelBench/data}"
-PYTHON_BIN="${PYTHON_BIN:-/work/LabelBench/env/bin/python}"
 QUEUE_FILE="$SAVE_DIR/queue_s${FIRST_SEED}-${LAST_SEED}.tsv"
 SEEDS=$(seq "$FIRST_SEED" "$LAST_SEED")
 # Per (K, s): one job at b = 10 and five conditions at each of the 19 later b, over four K.
 JOBS_PER_SEED=$((4 * (1 + 5 * 19)))
 
-export SAVE_DIR TRAINER_CONFIG DATA_DIR PYTHON_BIN QUEUE_FILE
+export SAVE_DIR TRAINER_CONFIG DATA_DIR PYTHON_BIN WANDB_PROJECT_ACQ WANDB_PROJECT_EVAL QUEUE_FILE
 export PYTHONPATH="$REPO_DIR" TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 cd "$REPO_DIR"
 
@@ -68,4 +71,13 @@ if [[ "$num_jobs" -ne "$num_expected" || "$num_missing" -ne 0 ]]; then
 fi
 
 "$PYTHON_BIN" tools/collect_results.py --save_dir "$SAVE_DIR"
+"$PYTHON_BIN" - "$SAVE_DIR/results_proxy.csv" "$TRAINER_CONFIG" <<'CHECK'
+import csv
+import sys
+
+with open(sys.argv[1], newline="") as f:
+    configs = {row["trainer_config"] for row in csv.DictReader(f)}
+if configs != {sys.argv[2]}:
+    sys.exit(f"Results use trainer configs {sorted(configs)}, expected only {sys.argv[2]}.")
+CHECK
 echo "Seeds ${FIRST_SEED}-${LAST_SEED} finished: ${num_jobs} jobs."

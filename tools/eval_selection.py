@@ -107,7 +107,8 @@ def train_and_test(orig_idxs: np.ndarray, K: int, s: int, train_seed: int, mode:
 
     return {"test_predictions": np.argmax(preds, axis=-1), "test_labels": np.argmax(labels, axis=-1),
             "steps_taken": int(trainer.num_steps_taken), "stopped_epoch": trainer.stopped_epoch,
-            "ended_by": trainer.ended_by, "best_val_loss": trainer.best_val_loss, "train_seconds": train_seconds,
+            "ended_by": trainer.ended_by, "best_step": trainer.best_step, "best_val_loss": trainer.best_val_loss,
+            "train_seconds": train_seconds,
             "per_class_counts": [int(n) for n in np.sum(dataset.get_train_labels(), axis=0)]}
 
 

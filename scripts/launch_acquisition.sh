@@ -20,9 +20,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-DATA_DIR="${DATA_DIR:-/work/LabelBench/data}"
+: "${DATA_DIR:?}"
 SAVE_DIR="${SAVE_DIR:-/work/ga3_output}"
-PYTHON_BIN="${PYTHON_BIN:-/work/LabelBench/env/bin/python}"
+: "${PYTHON_BIN:?}"
 NUM_GPUS="${NUM_GPUS:-1}"
 MAX_PARALLEL="${MAX_PARALLEL:-4}"
 WANDB_PROJECT_ACQ="${WANDB_PROJECT_ACQ:-LabelBench - ClassBaseline - acquisition}"
@@ -56,7 +56,7 @@ start_run() {
   local slot="$1" strategy="$2" K="$3" seed="$4"
   local name="${strategy}_K${K}_s${seed}"
   echo "trainer_config: $TRAINER_CONFIG" > "$LOG_DIR/${name}.log"
-  CUDA_VISIBLE_DEVICES=$((slot % NUM_GPUS)) "$PYTHON_BIN" main.py --seed "$seed" --wandb_name ATDL-labelbench \
+  CUDA_VISIBLE_DEVICES=$((slot % NUM_GPUS)) timeout 24h "$PYTHON_BIN" main.py --seed "$seed" --wandb_name ATDL-labelbench \
     --wandb_project "$WANDB_PROJECT_ACQ" --dataset cifar100_subset --num_classes "$K" --class_seed "$seed" \
     --save_dir "$SAVE_DIR" --data_dir "$DATA_DIR" --metric multi_class --batch_size $((10 * K)) --num_batch 20 \
     --embed_model_config clip_ViTB32.json --classifier_model_config linear.json \
@@ -67,7 +67,7 @@ start_run() {
   echo "$(date '+%F %T') start ${name} in slot ${slot}"
 }
 
-trap 'kill $(jobs -p) 2>/dev/null || true' INT TERM HUP
+trap 'kill $(jobs -p) 2>/dev/null || true; exit 143' INT TERM HUP
 
 num_slots=$((NUM_GPUS * MAX_PARALLEL))
 slot_pids=()
