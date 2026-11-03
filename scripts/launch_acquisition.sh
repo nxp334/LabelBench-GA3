@@ -4,6 +4,8 @@
 # start it inside tmux. Each run logs to $SAVE_DIR/logs/acquisition/. Exits with 1 if a run failed.
 # Restarting is safe: runs whose final labeled set (B = 200*K) exists are skipped, and unfinished runs start again.
 # The first line of each run log names the trainer config of that run. TRAINER_CONFIG overrides it.
+# ROUND_SIZE sets a constant number of labels per acquisition round for every K (default: 10*K, 20 rounds). It must
+# divide 10*K, so every B = b*K of the grid is reached; the second log line then records it. KS sets the K order.
 # Usage: scripts/launch_acquisition.sh [--num_seeds 3 | --first_seed 1 --last_seed 3] [--skip_badge_k100]
 set -euo pipefail
 
@@ -27,6 +29,14 @@ NUM_GPUS="${NUM_GPUS:-1}"
 MAX_PARALLEL="${MAX_PARALLEL:-4}"
 WANDB_PROJECT_ACQ="${WANDB_PROJECT_ACQ:-LabelBench - ClassBaseline - acquisition}"
 TRAINER_CONFIG="${TRAINER_CONFIG:-cifar100/flexmatch/clip_ViTB32_linear_minsteps.json}"
+ROUND_SIZE="${ROUND_SIZE:-}"
+KS="${KS:-10 20 50 100}"
+for K in $KS; do
+  if [[ -n "$ROUND_SIZE" ]] && (( 10 * K % ROUND_SIZE != 0 )); then
+    echo "ROUND_SIZE=$ROUND_SIZE does not divide 10*K=$((10 * K)), so the B grid of K=$K is not reached." >&2
+    exit 1
+  fi
+done
 LOG_DIR="$SAVE_DIR/logs/acquisition"
 mkdir -p "$LOG_DIR"
 
@@ -38,12 +48,16 @@ CUDA_VISIBLE_DEVICES=0 "$PYTHON_BIN" tools/precompute_features.py --data_dir "$D
 
 runs=()
 for seed in $(seq "$FIRST_SEED" "$LAST_SEED"); do
-  for K in 10 20 50 100; do
+  for K in $KS; do
     for strategy in margin badge; do
       if [[ "$SKIP_BADGE_K100" -eq 1 && "$strategy" == badge && "$K" -eq 100 ]]; then
         continue
       fi
       if [[ -f "$SAVE_DIR/acq/${strategy}_K${K}_s${seed}_B$((200 * K)).npy" ]]; then
+        if [[ -n "$ROUND_SIZE" ]] && ! grep -qFx "round_size: $ROUND_SIZE" "$LOG_DIR/${strategy}_K${K}_s${seed}.log"; then
+          echo "${strategy} K=${K} s=${seed} finished without round_size ${ROUND_SIZE} in its log." >&2
+          exit 1
+        fi
         echo "Skipping ${strategy} K=${K} s=${seed}: already finished."
         continue
       fi
@@ -55,10 +69,17 @@ done
 start_run() {
   local slot="$1" strategy="$2" K="$3" seed="$4"
   local name="${strategy}_K${K}_s${seed}"
+  local batch_size=$((10 * K)) num_batch=20
   echo "trainer_config: $TRAINER_CONFIG" > "$LOG_DIR/${name}.log"
+  if [[ -n "$ROUND_SIZE" ]]; then
+    # Init of 10*K labels, then rounds of ROUND_SIZE up to B = 200*K.
+    batch_size="$ROUND_SIZE"
+    num_batch=$((1 + 190 * K / ROUND_SIZE))
+    echo "round_size: $ROUND_SIZE" >> "$LOG_DIR/${name}.log"
+  fi
   CUDA_VISIBLE_DEVICES=$((slot % NUM_GPUS)) timeout 24h "$PYTHON_BIN" main.py --seed "$seed" --wandb_name ATDL-labelbench \
     --wandb_project "$WANDB_PROJECT_ACQ" --dataset cifar100_subset --num_classes "$K" --class_seed "$seed" \
-    --save_dir "$SAVE_DIR" --data_dir "$DATA_DIR" --metric multi_class --batch_size $((10 * K)) --num_batch 20 \
+    --save_dir "$SAVE_DIR" --data_dir "$DATA_DIR" --metric multi_class --batch_size "$batch_size" --num_batch "$num_batch" \
     --embed_model_config clip_ViTB32.json --classifier_model_config linear.json \
     --strategy_config "${strategy}_sampling.json" --trainer_config "$TRAINER_CONFIG" \
     --corrupter_config noiseless.json >> "$LOG_DIR/${name}.log" 2>&1 &

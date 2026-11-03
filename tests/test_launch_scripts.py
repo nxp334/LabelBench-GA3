@@ -9,7 +9,8 @@ FLOOR = "cifar100/flexmatch/clip_ViTB32_linear_floor500.json"
 MINSTEPS = "cifar100/flexmatch/clip_ViTB32_linear_minsteps.json"
 
 # Stands in for python: records its arguments. make_queue.py writes a queue with one result per job, but one, and
-# collect_results.py a CSV. The inline check of run_seeds.sh runs in real python.
+# collect_results.py a CSV. The queue has STUB_JOBS jobs, by default 384 per seed. The inline check of run_seeds.sh runs
+# in real python.
 STUB_PYTHON = """#!/bin/sh
 echo "$@" >> "$STUB_LOG"
 case "$1" in
@@ -19,10 +20,22 @@ case "$1" in
     printf 'K,trainer_config\\n10,%s\\n10,%s\\n' "$TRAINER_CONFIG" "${STUB_RESULT_CONFIG:-$TRAINER_CONFIG}" \\
       > "$SAVE_DIR/results_proxy.csv" ;;
   tools/make_queue.py)
+    jobs="${STUB_JOBS:-}"
+    if [ -z "$jobs" ]; then
+      jobs=0
+      in_seeds=0
+      for arg in "$@"; do
+        case "$arg" in
+          --seeds) in_seeds=1 ;;
+          --*) in_seeds=0 ;;
+          *) if [ "$in_seeds" -eq 1 ]; then jobs=$((jobs + 384)); fi ;;
+        esac
+      done
+    fi
     mkdir -p "$SAVE_DIR/eval/proxy"
     : > "$QUEUE_FILE"
     i=0
-    while [ "$i" -lt "$STUB_JOBS" ]; do
+    while [ "$i" -lt "$jobs" ]; do
       printf 'proxy\\t%s/acq/job%s.npy\\tconfig\\n' "$SAVE_DIR" "$i" >> "$QUEUE_FILE"
       [ "$i" -eq "${STUB_NO_RESULT:--1}" ] || touch "$SAVE_DIR/eval/proxy/job$i.json"
       i=$((i + 1))
@@ -48,7 +61,7 @@ def env(tmp_path):
     return dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", DATA_DIR=str(tmp_path / "data"),
                 SAVE_DIR=str(tmp_path / "save"), PYTHON_BIN=str(write_executable(bin_dir / "python", STUB_PYTHON)),
                 WANDB_PROJECT_ACQ="acq project", WANDB_PROJECT_EVAL="eval project", REAL_PYTHON=sys.executable,
-                STUB_LOG=str(tmp_path / "calls.log"), STUB_JOBS="384", MAX_PARALLEL="2", POLL_SECONDS="0")
+                STUB_LOG=str(tmp_path / "calls.log"), MAX_PARALLEL="2", POLL_SECONDS="0")
 
 
 def calls(env, script):
@@ -58,6 +71,17 @@ def calls(env, script):
 
 def value(call, flag):
     return call[call.index(flag) + 1]
+
+
+def values(call, flag):
+    """All values after flag, up to the next flag."""
+    rest = call[call.index(flag) + 1:]
+    return rest[:next((i for i, arg in enumerate(rest) if arg.startswith("--")), len(rest))]
+
+
+def started(stdout):
+    """Names of the acquisition runs in the order they were started."""
+    return [line.split()[3] for line in stdout.splitlines() if " start " in line]
 
 
 def run(env, *command):
@@ -198,6 +222,70 @@ def test_stage_refuses_the_old_directory_and_a_missing_config(env, tmp_path):
     del env["TRAINER_CONFIG"]
     assert run(env, "scripts/run_seeds.sh", "1", "3").returncode != 0
     assert not (tmp_path / "save").exists()
+
+
+def test_default_acquisition_plan_is_unchanged(env):
+    # The plan before ROUND_SIZE and KS: K in 10, 20, 50, 100, batch 10*K for 20 batches, one log line.
+    result = run(env, "scripts/launch_acquisition.sh")
+    assert result.returncode == 0
+    plan = [f"{strategy}_K{K}_s{seed}" for seed in (1, 2, 3) for K in (10, 20, 50, 100) for strategy in ("margin", "badge")]
+    assert started(result.stdout) == plan
+    assert sorted((value(call, "--num_classes"), value(call, "--batch_size"), value(call, "--num_batch"))
+                  for call in calls(env, "main.py")) == sorted((str(K), str(10 * K), "20") for K in (10, 20, 50, 100)
+                                                               for _ in range(6))
+    with open(os.path.join(env["SAVE_DIR"], "logs", "acquisition", "badge_K100_s3.log"), "r") as f:
+        assert f.read() == f"trainer_config: {MINSTEPS}\n"
+
+
+@pytest.mark.parametrize("K, num_batch", [(10, "20"), (20, "39"), (50, "96"), (100, "191")])
+def test_round_size_gives_constant_rounds_up_to_the_same_B(env, K, num_batch):
+    env.update(ROUND_SIZE="100", KS=str(K))
+    assert run(env, "scripts/launch_acquisition.sh", "--first_seed", "1", "--last_seed", "1").returncode == 0
+    runs = calls(env, "main.py")
+    assert len(runs) == 2 and {value(call, "--num_classes") for call in runs} == {str(K)}
+    assert {(value(call, "--batch_size"), value(call, "--num_batch")) for call in runs} == {("100", num_batch)}
+    with open(os.path.join(env["SAVE_DIR"], "logs", "acquisition", f"margin_K{K}_s1.log"), "r") as f:
+        assert f.readlines()[:2] == [f"trainer_config: {MINSTEPS}\n", "round_size: 100\n"]
+
+
+def test_round_size_must_reach_the_b_grid(env):
+    env["ROUND_SIZE"] = "300"
+    result = run(env, "scripts/launch_acquisition.sh")
+    assert result.returncode != 0 and "does not divide 10*K=100" in result.stderr
+    assert not os.path.exists(env["STUB_LOG"])
+
+
+def test_finished_run_with_another_round_size_is_refused(env, tmp_path):
+    (tmp_path / "save" / "acq").mkdir(parents=True)
+    (tmp_path / "save" / "logs" / "acquisition").mkdir(parents=True)
+    (tmp_path / "save" / "acq" / "margin_K10_s1_B2000.npy").touch()
+    (tmp_path / "save" / "logs" / "acquisition" / "margin_K10_s1.log").write_text(f"trainer_config: {FLOOR}\n")
+    env["ROUND_SIZE"] = "100"
+    result = run(env, "scripts/launch_acquisition.sh", "--first_seed", "1", "--last_seed", "1")
+    assert result.returncode != 0 and "without round_size 100" in result.stderr
+    assert not calls(env, "main.py")
+
+
+def test_constbatch_runs_complete_seeds_in_stages(env):
+    result = run(env, "scripts/run_constbatch.sh")
+    assert result.returncode == 0, result.stderr
+    order = [f"{strategy}_K{K}_s{seed}" for K in (10, 100, 20, 50) for strategy in ("margin", "badge")
+             for seed in (1,)]
+    assert started(result.stdout)[:8] == order
+    assert [name.split("_s")[1] for name in started(result.stdout)] == ["1"] * 8 + ["2"] * 8 + ["3"] * 8 + ["4"] * 8
+    assert [values(call, "--seeds") for call in calls(env, "tools/make_queue.py")] == [["1"], ["2", "3"], ["4"]]
+    runs = calls(env, "main.py")
+    assert {value(call, "--batch_size") for call in runs} == {"100"}
+    assert {value(call, "--trainer_config") for call in runs} == {FLOOR}
+    assert result.stdout.count("finished: ") == 3
+
+
+@pytest.mark.parametrize("name", ["ga3_output", "ga3_output_floor500"])
+def test_constbatch_refuses_the_directories_of_other_runs(env, tmp_path, name):
+    env["SAVE_DIR"] = str(tmp_path / name)
+    result = run(env, "scripts/run_constbatch.sh")
+    assert result.returncode != 0 and "Refusing" in result.stderr
+    assert not (tmp_path / name).exists()
 
 
 @pytest.mark.parametrize("name", ["DATA_DIR", "PYTHON_BIN", "WANDB_PROJECT_ACQ", "WANDB_PROJECT_EVAL"])
