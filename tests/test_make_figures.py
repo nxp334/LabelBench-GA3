@@ -3,9 +3,10 @@ import os
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tools.analyze_results import CONDITIONS
-from tools.make_figures import make_figures
+from tools.make_figures import class_count_table, make_figures
 
 
 def test_make_figures_smoke(tmp_path, train_targets):
@@ -33,8 +34,33 @@ def test_make_figures_smoke(tmp_path, train_targets):
     results = tmp_path / "results.csv"
     pd.DataFrame(rows).to_csv(results, index=False)
 
-    paths, shares = make_figures(str(results), str(raw_dir), str(tmp_path / "figures"), train_targets)
-    assert len(paths) == 6
+    paths, shares = make_figures(str(results), str(raw_dir), str(tmp_path / "figures"), train_targets,
+                                 tables_dir=str(tmp_path / "tables"))
+    assert len(paths) == 8
     for path in paths:
         assert os.path.getsize(path) > 0
     assert set(shares["condition"]) == {"margin", "badge", "random"}
+
+
+def test_class_count_table(tmp_path):
+    # Class 7 has 3 labels in both seeds, class 8 has 2 and 0, class 9 has 1 and 3.
+    targets = np.array([7, 7, 7, 8, 8, 9, 9, 9, 9])
+    sets = {1: [0, 1, 2, 3, 4, 5], 2: [0, 1, 2, 5, 6, 7]}
+    tasks = pd.DataFrame([{"K": 3, "s": s, "class_ids": [7, 8, 9], "classnames": ["a", "b", "c"]} for s in sets])
+    for s, idxs in sets.items():
+        for strategy in ("margin", "badge"):
+            np.save(tmp_path / f"{strategy}_K3_s{s}_B6.npy", np.array(idxs))
+    table = class_count_table(str(tmp_path), tasks, targets, K=3, b=2, n=1)
+    margin = table[table["strategy"] == "margin"].set_index("group")
+    assert margin.loc["most", "classname"] == "a" and margin.loc["most", "mean_labels"] == 3
+    assert margin.loc["most", "seeds_in_group"] == 2 and margin.loc["most", "mean_labels_div_b"] == 1.5
+    assert margin.loc["least", "classname"] == "b" and margin.loc["least", "mean_labels"] == 1
+    assert margin.loc["least", "sd_labels"] == pytest.approx(np.sqrt(2))
+    assert margin.loc["least", "seeds_in_group"] == 1
+
+
+def test_class_count_table_needs_one_class_set(tmp_path):
+    tasks = pd.DataFrame([{"K": 2, "s": 1, "class_ids": [0, 1], "classnames": ["a", "b"]},
+                          {"K": 2, "s": 2, "class_ids": [0, 2], "classnames": ["a", "c"]}])
+    with pytest.raises(ValueError, match="one class set"):
+        class_count_table(str(tmp_path), tasks, np.zeros(1, dtype=int), K=2, b=1)

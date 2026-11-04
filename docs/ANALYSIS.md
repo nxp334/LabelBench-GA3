@@ -50,6 +50,11 @@ These are exploratory.
   q_k = c_k / b (= K·c_k / B), where c_k is the number of labels of class k. q = 1.0 is balanced. q is sorted in
   descending order, plotted at x = (rank − 0.5) / K, and averaged over seeds per rank. The share of classes with
   q < 0.5 is printed per (condition, K), as the mean over seeds.
+- **Most and least labeled classes:** at K = 100 the class set is the same in all seeds, so label counts can be
+  averaged per class. At b = 100, per strategy (margin, badge) and class: the mean, sample standard deviation,
+  minimum and maximum of the label count over seeds, and the mean divided by b. The 10 classes with the largest and
+  the 10 with the smallest mean are listed, with the number of seeds in which the class is among the 10 most (or
+  least) labeled of that seed. Computed in `tools/make_figures.py` (`--tables_dir`).
 - **Gain vs b:** total and composition per b, mean over seeds.
 - **Stopping:** per K, over rows that were trained as their own condition (`evaluated_as == condition`) with
   b ≥ 20: the share of rows with `ended_by == early_stopping`, and the medians of `steps_taken` and `best_step`.
@@ -65,13 +70,14 @@ These are exploratory.
 
 ## Reproducing
 
-From the repository root, with CIFAR-100 in `../ga3_data` and the raw output in `../ga3_results/ga3_output_floor500`:
+From the repository root, with CIFAR-100 in `../ga3_data` and the raw output in `../ga3_results_raw/ga3_output_floor500`:
 
 ```bash
 python tools/analyze_results.py --results ga3_results/floor500/results_proxy.csv \
-  --tasks_dir ../ga3_results/ga3_output_floor500/tasks --out_dir ga3_results/tables
+  --tasks_dir ../ga3_results_raw/ga3_output_floor500/tasks --out_dir ga3_results/tables
 PYTHONPATH=. python tools/make_figures.py --results ga3_results/floor500/results_proxy.csv \
-  --raw_dir ../ga3_results/ga3_output_floor500 --out_dir ga3_results/figures --cifar_dir ../ga3_data
+  --raw_dir ../ga3_results_raw/ga3_output_floor500 --out_dir ga3_results/figures --cifar_dir ../ga3_data \
+  --tables_dir ga3_results/tables
 ```
 
 `--metric`, `--min_b` (default 20) and `--ci` (default 0.95) set the primary metric, the smallest b and the interval
@@ -95,8 +101,10 @@ Horizontal line at 0.
 **Figure 3** (`fig3_class_composition_b100.png`, exploratory). Class composition of the labeled sets at b = 100.
 Per K, the labels in each of the K classes divided by the balanced share b (q = c/b above), sorted from most to least
 labeled, at x = (rank − 0.5)/K (fraction of classes), mean over 4 seeds per rank. Panels margin and badge. Solid
-lines: AL, labeled with K at their left end. Dotted lines: random. Colour: K, light (K = 10) to dark (K = 100).
-Horizontal line at 1.0 (balanced). cb-AL is not shown: by construction it has the same per-class counts as AL.
+lines: AL, one per K, colour from light (K = 10) to dark (K = 100). Grey dotted lines: random, one per K, drawn in
+the same grey. Horizontal line at 1.0 (balanced). Class identity is not shown, because ranks are averaged over seeds
+with different class sets (see Table A-class-counts for K = 100). cb-AL is not shown: by construction it has the same
+per-class counts as AL.
 
 **Figure A1** (`figA1_class_composition_b200.png`, exploratory). As Figure 3, at b = 200.
 
@@ -118,6 +126,11 @@ reduction of the total gain in %, aggregated the same way.
 
 **Table A-equal-B** (`A_equal_B`). Total, composition and selection gain in pp at each B that is reached by at least
 two K, b = 20 to 200. Per (B, K, strategy): mean and sample standard deviation over 4 seeds. One b per (B, K).
+
+**Table A-class-counts** (`A_class_counts_K100_b100`, exploratory). K = 100, b = 100, 4 seeds with the same 100
+classes. Per strategy, the 10 classes with the largest and the 10 with the smallest mean label count over the 4
+seeds: class id and name, mean, sample standard deviation, minimum and maximum of the count, mean divided by b
+(1.0 = balanced), and the number of seeds (of 4) in which the class is among the 10 most (or least) labeled.
 
 **Table A-stopping** (`A_stopping`). Per K, over the rows trained as their own condition with b = 20 to 200 (all 5
 conditions, 4 seeds): number of rows, share with `ended_by = early_stopping`, median `steps_taken` and median
