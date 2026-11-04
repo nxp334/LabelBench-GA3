@@ -84,7 +84,8 @@ cb-badge, both with random.
 
 **Figure 1** (`ga3_results/figures/fig1_accuracy_vs_b.png`). Test accuracy (%) vs b, rows margin and badge,
 columns K = 10, 20, 50, 100, b = 10 to 200. Lines: random (grey, dotted), cb-AL (orange, dashed) and AL (blue,
-solid), mean over 4 seeds. Bands: minimum to maximum over the 4 seeds. The y-axis differs per K.
+solid), mean over 4 seeds. Bands: minimum to maximum over the 4 seeds. The y-axis differs per K. b = 10 (the shared
+initial labeled set) is plotted but excluded from the analysis.
 
 **Figure 2** (`fig2_decomposition.png`). Total, composition and selection gain (pp) per K, panels margin and badge.
 Large markers with bars: mean over 4 seeds of the per-seed mean over b = 20 to 200, with the 95% t-interval (3
@@ -92,9 +93,10 @@ degrees of freedom). Small points: the 4 per-seed means, shifted to the right wi
 Horizontal line at 0.
 
 **Figure 3** (`fig3_class_composition_b100.png`, exploratory). Class composition of the labeled sets at b = 100.
-Per K, q = c/b of each of the K classes, sorted in descending order, x = (rank − 0.5)/K, mean over 4 seeds per rank.
-Panels margin and badge. Solid lines: AL. Dotted lines: random. Colour: K, light (K = 10) to dark (K = 100).
-Horizontal line at q = 1.0 (balanced).
+Per K, the labels in each of the K classes divided by the balanced share b (q = c/b above), sorted from most to least
+labeled, at x = (rank − 0.5)/K (fraction of classes), mean over 4 seeds per rank. Panels margin and badge. Solid
+lines: AL, labeled with K at their left end. Dotted lines: random. Colour: K, light (K = 10) to dark (K = 100).
+Horizontal line at 1.0 (balanced). cb-AL is not shown: by construction it has the same per-class counts as AL.
 
 **Figure A1** (`figA1_class_composition_b200.png`, exploratory). As Figure 3, at b = 200.
 

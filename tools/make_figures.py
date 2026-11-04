@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from LabelBench.dataset.class_subset import labeled_filename  # noqa: E402
@@ -92,7 +93,9 @@ def fig_decomposition(dec: pd.DataFrame, summary: pd.DataFrame, out_dir: str) ->
         ax.grid(axis="y", alpha=0.3)
     axes[0, 0].set_ylabel("gain (pp)")
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.06), frameon=False)
+    handles.append(Line2D([], [], marker="o", linestyle="", color="#7f7f7f", alpha=0.5, markersize=4))
+    labels.append(f"individual seeds (n = {seeds['s'].nunique()})")
+    fig.legend(handles, labels, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.06), frameon=False)
     fig.tight_layout()
     return save(fig, out_dir, "fig2_decomposition.png")
 
@@ -118,20 +121,35 @@ def fig_class_composition(acq_dir: str, tasks: pd.DataFrame, targets: np.ndarray
     shares = []
     fig, axes = plt.subplots(1, len(STRATEGIES), figsize=(5.5 * len(STRATEGIES), 3.8), sharey=True, squeeze=False)
     for ax, strategy in zip(axes[0], STRATEGIES):
+        starts = []
         for K in Ks:
             x = (np.arange(1, K + 1) - 0.5) / K
-            for condition, style, label in ((strategy, "-", f"{strategy} K={K}"), ("random", ":", f"random K={K}")):
+            for condition, style in ((strategy, "-"), ("random", ":")):
                 result = class_composition(acq_dir, tasks, targets, condition, K, b)
-                ax.plot(x, result["q"], color=colors[K], linestyle=style, label=label)
+                ax.plot(x, result["q"], color=colors[K], linestyle=style)
+                if condition != "random":
+                    starts.append((result["q"][0], x[0], K))
                 if ax is axes[0, 0] or condition != "random":
                     shares.append({"condition": condition, "K": K, "b": b,
                                    "share_q_below_0.5": result["share_below_half"]})
+        # Label each AL curve with K at its left end, spreading the labels so they do not overlap.
+        gap = 0.08 * np.diff(ax.get_ylim())[0]
+        label_y = None
+        for y, x0, K in sorted(starts):
+            label_y = y if label_y is None else max(y, label_y + gap)
+            ax.annotate(f"K={K}", xy=(x0, y), xytext=(-0.06, label_y), ha="right", va="center", fontsize=8,
+                        fontweight="bold", color=colors[K],
+                        arrowprops={"arrowstyle": "-", "color": colors[K], "linewidth": 0.6, "shrinkA": 2})
+        # Room left of 0 for the labels, ticks only on the data range.
+        ax.set_xlim(-0.24, 1.02)
+        ax.set_xticks(np.linspace(0, 1, 6))
         ax.axhline(1.0, color="black", linewidth=0.8)
-        ax.set_title(f"{strategy}, b={b}", fontsize=10)
-        ax.set_xlabel("class rank (rank - 0.5) / K")
+        ax.set_title(f"{strategy}, b = {b} labels per class", fontsize=10)
+        ax.set_xlabel("classes sorted from most to least labeled (fraction of classes)")
         ax.grid(alpha=0.3)
-        ax.legend(fontsize=7, ncol=2, loc="upper right", frameon=False)
-    axes[0, 0].set_ylabel("q = c / b (1.0 = balanced)")
+        ax.legend([Line2D([], [], color="black", linestyle="-"), Line2D([], [], color="black", linestyle=":")],
+                  ["AL", "random"], fontsize=8, loc="upper right", frameon=False)
+    axes[0, 0].set_ylabel("labels in class ÷ balanced share\n(1.0 = balanced)")
     fig.tight_layout()
     return save(fig, out_dir, name), pd.DataFrame(shares)
 
