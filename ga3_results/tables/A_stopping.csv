@@ -1,0 +1,5 @@
+K,n_rows,share_early_stopping,median_steps_taken,median_best_step
+10,380,1.0,1764.0,714.0
+20,380,1.0,1886.0,819.0
+50,380,1.0,2262.5,1058.0
+100,380,1.0,2886.0,1417.0
