@@ -1,7 +1,8 @@
 # Analysis
 
 What is computed from the results CSV of the floor500 run (`ga3_results/floor500/results_proxy.csv`), and how. This
-document contains no results.
+document contains no results. Floor500 = at least 500 training steps per run (see "Training regimes" in
+`GA3_DEVIATIONS.md`).
 
 ## Symbols
 
@@ -42,9 +43,7 @@ Implemented in `tools/analyze_results.py`.
 
 ## Exploratory analyses
 
-These are exploratory.
-
-- **Class composition:** for b = 100 (main) and b = 200 (appendix), conditions margin, badge and random, every K
+- **Class composition:** for b = 100 (main), b = 30 and b = 200 (appendix), conditions margin, badge and random, every K
   and seed. The labeled set `acq/<condition>_K<K>_s<s>_B<B>.npy` holds CIFAR-100 train indices, and each index is
   mapped to its class with the CIFAR-100 train targets. For each of the K classes of the task,
   q_k = c_k / b (= K·c_k / B), where c_k is the number of labels of class k. q = 1.0 is balanced. q is sorted in
@@ -55,7 +54,13 @@ These are exploratory.
   minimum and maximum of the label count over seeds, and the mean divided by b. The 10 classes with the largest and
   the 10 with the smallest mean are listed, with the number of seeds in which the class is among the 10 most (or
   least) labeled of that seed. Computed in `tools/make_figures.py` (`--tables_dir`).
-- **Gain vs b:** total and composition per b, mean over seeds.
+- **Image examples:** at K = 100 and b = 100, per strategy, the 9 most and the 9 least labeled classes, ranked as in
+  the previous item and shown from most to least labeled. For a condition, the eligible images are those in its
+  labeled set at B = 10000 but not in the initial set (B = 1000), pooled over the 4 seeds. One image per class is
+  drawn (`RandomState(0)`) for the strategy (images it picked) and one for its ClassBaseline (images drawn at random
+  within each class). An image in both labeled sets is not shown twice: the ClassBaseline draw excludes the
+  strategy's image.
+- **Gain vs b:** total, composition and selection gain per b, mean over seeds.
 - **Stopping:** per K, over rows that were trained as their own condition (`evaluated_as == condition`) with
   b ≥ 20: the share of rows with `ended_by == early_stopping`, and the medians of `steps_taken` and `best_step`.
 
@@ -67,6 +72,7 @@ These are exploratory.
 - Seed-level variation mixes class-subset and algorithm randomness at K = 10, 20 and 50. At K = 100 the class set is
   identical for all seeds, so only algorithm randomness varies.
 - Chance normalisation (gain / (1 − 1/K)) changes the values by at most about 0.1 pp, so it is not used.
+- Top-k accuracy is not computed: evaluation saves only the predicted class (`tools/eval_selection.py`).
 
 ## Reproducing
 
@@ -83,55 +89,21 @@ PYTHONPATH=. python tools/make_figures.py --results ga3_results/floor500/results
 `--metric`, `--min_b` (default 20) and `--ci` (default 0.95) set the primary metric, the smallest b and the interval
 level.
 
-## Captions
+## Figures and tables
 
-All figures and tables use n = 4 seeds. All gains are paired by (K, s, b): margin with cb-margin, badge with
-cb-badge, both with random.
+All use n = 4 seeds. Figures are in `ga3_results/figures/` (PNG), tables in `ga3_results/tables/` (CSV and LaTeX).
 
-**Figure 1** (`ga3_results/figures/fig1_accuracy_vs_b.png`). Test accuracy (%) vs b, rows margin and badge,
-columns K = 10, 20, 50, 100, b = 10 to 200. Lines: random (grey, dotted), cb-AL (orange, dashed) and AL (blue,
-solid), mean over 4 seeds. Bands: minimum to maximum over the 4 seeds. The y-axis differs per K. b = 10 (the shared
-initial labeled set) is plotted but excluded from the analysis.
-
-**Figure 2** (`fig2_decomposition.png`). Total, composition and selection gain (pp) per K, panels margin and badge.
-Large markers with bars: mean over 4 seeds of the per-seed mean over b = 20 to 200, with the 95% t-interval (3
-degrees of freedom). Small points: the 4 per-seed means, shifted to the right with a small horizontal jitter.
-Horizontal line at 0.
-
-**Figure 3** (`fig3_class_composition_b100.png`, exploratory). Class composition of the labeled sets at b = 100.
-Per K, the labels in each of the K classes divided by the balanced share b (q = c/b above), sorted from most to least
-labeled, at x = (rank − 0.5)/K (fraction of classes), mean over 4 seeds per rank. Panels margin and badge. Solid
-lines: AL, one per K, colour from light (K = 10) to dark (K = 100). Grey dotted lines: random, one per K, drawn in
-the same grey. Horizontal line at 1.0 (balanced). Class identity is not shown, because ranks are averaged over seeds
-with different class sets (see Table A-class-counts for K = 100). cb-AL is not shown: by construction it has the same
-per-class counts as AL.
-
-**Figure A1** (`figA1_class_composition_b200.png`, exploratory). As Figure 3, at b = 200.
-
-**Figure A2** (`figA2_accuracy_all_K.png`). Test accuracy (%) vs b = 10 to 200, panels margin and badge. Solid: AL.
-Dotted: random. Colour: K. Lines are the mean over 4 seeds. No bands.
-
-**Figure A3** (`figA3_gain_vs_b.png`, exploratory). Total gain (top row) and composition gain (bottom row) in pp vs
-b = 20 to 200, columns margin and badge. One line per K, mean over 4 seeds. No bands. Horizontal line at 0.
-
-**Table T1** (`ga3_results/tables/T1_task_overlap`). Number of classes shared by each pair of seeds, per K, with
-the minimum and maximum over the 6 pairs. Appendix (`T1_class_lists`): class ids, class names, validation and test
-size per (K, s).
-
-**Table T2** (`T2_decomposition`). Total, composition and selection gain in pp per K and strategy: mean over 4 seeds
-of the per-seed mean over b = 20 to 200, with the 95% t-interval [lower, upper]. `rel_total_pct`: mean relative error
-reduction of the total gain in %, aggregated the same way.
-
-**Table A-macro-F1** (`A_macro_f1`). As T2 without `rel_total_pct`, with macro-F1 in place of test accuracy.
-
-**Table A-equal-B** (`A_equal_B`). Total, composition and selection gain in pp at each B that is reached by at least
-two K, b = 20 to 200. Per (B, K, strategy): mean and sample standard deviation over 4 seeds. One b per (B, K).
-
-**Table A-class-counts** (`A_class_counts_K100_b100`, exploratory). K = 100, b = 100, 4 seeds with the same 100
-classes. Per strategy, the 10 classes with the largest and the 10 with the smallest mean label count over the 4
-seeds: class id and name, mean, sample standard deviation, minimum and maximum of the count, mean divided by b
-(1.0 = balanced), and the number of seeds (of 4) in which the class is among the 10 most (or least) labeled.
-
-**Table A-stopping** (`A_stopping`). Per K, over the rows trained as their own condition with b = 20 to 200 (all 5
-conditions, 4 seeds): number of rows, share with `ended_by = early_stopping`, median `steps_taken` and median
-`best_step`.
+| File | Shows |
+|---|---|
+| `fig1_accuracy_vs_b` | Test accuracy vs b for AL, ClassBaseline and Random, per strategy and K (band: min to max over seeds). |
+| `fig2_decomposition` | Total, composition and selection gain per K and strategy: mean, 95% t-interval and per-seed means. |
+| `fig3_class_composition_b100` (`figA4`: b = 30, `figA1`: b = 200) | Labels per class divided by b, sorted by rank, AL and Random, per K. |
+| `figA2_accuracy_all_K` | Test accuracy vs b, all K in one panel per strategy. |
+| `figA3_gain_vs_b` | Total, composition and selection gain vs b, per K. |
+| `figA5`, `figA6` (compact: `figA7`, `figA8`) | K = 100, b = 100: example images of the most and least labeled classes, strategy vs its ClassBaseline. |
+| `T1_task_overlap`, `T1_overlap_compact`, `T1_class_lists` | Classes shared between seeds per K, and the class list of each task. |
+| `T2_decomposition` | Gains per K and strategy: mean, 95% t-interval, and relative error reduction of the total gain. |
+| `A_macro_f1` | As T2, with macro-F1. |
+| `A_equal_B` | Gains at the B values reached by two or more K. |
+| `A_class_counts_K100_b100` | K = 100, b = 100: the 10 most and 10 least labeled classes per strategy. |
+| `A_stopping` | Per K: share of runs ended by early stopping, median `steps_taken` and `best_step`. |

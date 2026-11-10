@@ -26,13 +26,12 @@ verified). Existing feature files are reused unchanged.
 | `"cra"` -> `"crab"` in `cifar100_subset` only | `"cra"` is a typo in `classnames.py` that would corrupt the zero-shot prompt of that class. Other datasets stay as they are. |
 | Proxy `min_steps` = 500 (minsteps config, finished n=3 run): more epochs when needed, and no early stopping before 500 steps | Stock proxy training scales with B, so small K took as few as 20 steps. That would confound the quality of AL selection with K. E2e is unchanged. |
 | Floor500 config for the rerun: see "Training regimes" | At `c1e2bba`, `min_steps` also ended training at small B, so early stopping could not choose a model there. |
-| Feature slices kept in memory per process, and `num_workers` = 0 for the proxy | `min_steps` means many short epochs, and stock reloads features and restarts loader workers every epoch. Not expected to change the distribution of results; individual numbers can differ through RNG order (not verified). |
-| Embed `num_workers` 40 -> 6 | Commit `c1e2bba`: "for 8-vCPU VM". |
+| Feature slices kept in memory per process, and `num_workers` = 0 for the proxy (see "Training regimes") | `min_steps` means many short epochs, and stock reloads features and restarts loader workers every epoch. |
 | `random` built offline (`tools/make_baselines.py`): the init set plus a fixed permutation of the rest of the pool, instead of the stock `random` strategy | Needs no acquisition run, and is nested across B. |
 | ClassBaseline (`cb-margin`, `cb-badge`): a new condition with AL's per-class counts at each B, drawn at random within each class | Separates the class composition of AL's labels from which images AL picked within each class. |
 | New `main.py` arguments (`--num_classes`, `--class_seed`, `--init_per_class`, `--save_dir`, `--wandb_project`) and W&B `job_type`, `group`, `tags` for subset runs | Carry K, s and the output folder, and group runs by task. |
 | New trainer attributes: `num_steps_taken`, `stopped_epoch`, `best_val_loss`, `ended_by`, `best_step` | Training length and model selection can be audited per evaluation. They use no random numbers. |
-| Evaluation trains a new model per saved set (`tools/eval_selection.py`), with the same training seed for all conditions at one (s, B) | Every condition is scored the same way, so differences come from the labeled set. |
+| Evaluation trains a new model per saved set (`tools/eval_selection.py`) | Every condition is scored the same way. |
 | Evaluation skips the full-pool pass | Only test scores are needed, and predicting on the whole pool is slow in e2e. |
 | One evaluation job per (K, s) at b = 10 | All conditions share the init set there, so `collect_results.py` repeats that one result for every condition. |
 | Smoke configs (`configs/trainer/cifar100/smoke/`, `max_epoch` 1), single-GPU launchers (`scripts/launch_acquisition.sh`, `scripts/launch_eval.sh`), queue tiers (`tools/make_queue.py`), `tools/precompute_features.py` | Fast smoke test; parallel runs on one GPU; a partly finished queue has complete seeds; feature files are written once before parallel runs, because `FeatureExtractor` writes without locking. |
@@ -47,7 +46,9 @@ There are two runs with different training:
 1. **Finished n=3 run** (commit `c1e2bba`, `clip_ViTB32_linear_minsteps.json`). `min_steps` raises the epoch limit
    only far enough to reach 500 steps, so below about 3500 labels this is effectively a fixed 500-step budget. Early
    stopping is inactive until the last epoch, so only one check runs and the final model is kept (derived).
-2. **Floor500 rerun** (`clip_ViTB32_linear_floor500.json`), for acquisition and evaluation.
+2. **Floor500 rerun** (`clip_ViTB32_linear_floor500.json`), for acquisition and evaluation. "Floor" means a lower
+   bound, not rounding down: training runs for at least 500 optimizer steps (`min_steps`), and after that early
+   stopping can end it, at most 7500 steps (`max_steps`).
 
 Selections are path dependent: margin and BADGE pick labels with the model trained in the previous round. The two runs
 therefore have different labeled sets and cannot be compared set by set.

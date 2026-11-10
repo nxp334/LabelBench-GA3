@@ -114,6 +114,11 @@ it, 500 steps is too few: raise `min_steps` in `clip_ViTB32_linear_minsteps.json
 
 ## 4. Full run
 
+The reported results (`ga3_results/floor500/`) come from `scripts/run_seeds.sh` with
+`TRAINER_CONFIG=cifar100/flexmatch/clip_ViTB32_linear_floor500.json` and 4 seeds (see "Pipeline" in
+`docs/GA3_DEVIATIONS.md`). It runs steps 4a to 4e for a range of seeds. The steps below are the earlier n = 3 run with
+the minsteps config.
+
 **4a. Acquisition.** Start it in tmux: it stays in the foreground, runs at most `MAX_PARALLEL` runs at a time and starts
 the next when one ends.
 
