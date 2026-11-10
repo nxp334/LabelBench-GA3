@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from tools.analyze_results import (CONDITIONS, check_nested, decompose, equal_b_table, load_results, load_tasks,
-                                   relative_error_reduction, summarize, task_overlap)
+                                   overlap_compact, relative_error_reduction, summarize, task_overlap)
 
 CONFIG = "cifar100/flexmatch/clip_ViTB32_linear_floor500.json"
 # Accuracy per condition: margin gains are 2 pp total (1 composition), badge gains 4 pp total (3 composition).
@@ -117,6 +117,9 @@ def test_tasks_nested_and_overlap(tmp_path):
     check_nested(tasks)
     overlap = task_overlap(tasks).set_index("K")["shared_classes"]
     assert overlap.to_dict() == {2: 1, 3: 2}
+    compact = overlap_compact(tasks).set_index("K")
+    assert compact.loc[3, ["min", "mean", "max", "in_all_seeds"]].tolist() == [2, 2, 2, 2]
+    assert compact.loc[2, "expected"] == pytest.approx(0.04)
 
 
 def test_tasks_not_nested_raise(tmp_path):

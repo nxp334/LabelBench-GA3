@@ -162,6 +162,17 @@ def overlap_summary(overlap: pd.DataFrame) -> pd.DataFrame:
     return table.reset_index()
 
 
+def overlap_compact(tasks: pd.DataFrame) -> pd.DataFrame:
+    """
+    Per K: min, mean and max over seed pairs of the shared classes, the expected number K^2 / 100 for two uniformly
+    drawn K-subsets of the 100 classes, and the number of classes in every seed.
+    """
+    overlap = task_overlap(tasks).groupby("K")["shared_classes"].agg(["min", "mean", "max"])
+    in_all = tasks.groupby("K")["class_ids"].agg(lambda sets: len(set.intersection(*map(set, sets))))
+    table = overlap.assign(expected=overlap.index ** 2 / 100, in_all_seeds=in_all)
+    return table.reset_index()
+
+
 def interval_table(summary: pd.DataFrame, columns: Sequence[str], decimals: int = 2) -> pd.DataFrame:
     """mean [lower, upper] strings of the t-interval."""
     table = summary[["K", "strategy"]].copy()
@@ -191,6 +202,7 @@ def write_tables(out_dir: str, summary: pd.DataFrame, rel_summary: pd.DataFrame,
     paths += write_table(stopping, out_dir, "A_stopping")
     if tasks is not None:
         paths += write_table(overlap_summary(task_overlap(tasks)), out_dir, "T1_task_overlap")
+        paths += write_table(overlap_compact(tasks), out_dir, "T1_overlap_compact")
         class_lists = tasks.assign(class_ids=[" ".join(map(str, ids)) for ids in tasks["class_ids"]],
                                    classnames=[", ".join(names) for names in tasks["classnames"]])
         paths += write_table(class_lists, out_dir, "T1_class_lists")
